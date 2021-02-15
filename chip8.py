@@ -1,8 +1,15 @@
 from stack import Stack
-import pygame
+import pygame, pygame.midi
 import numpy as np
 import random
-
+# -------------------------------------------------------------------------------------------------------------------------------------
+# THIS IS A CHIP-8 PYTHON EMULATOR THAT DEPENDS ON PYGAME AND NUMPY
+# REFERENCES: 
+# >>> https://en.wikipedia.org/wiki/CHIP-8
+# >>> https://tobiasvl.github.io/blog/write-a-chip-8-emulator/
+# >>> https://www.reddit.com/r/EmuDev/
+# CREATED BY KID FRIENDLY
+# DISCORD: Kid Friendly#9195
 # -------------------------------------------------------------------------------------------------------------------------------------
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -13,7 +20,7 @@ def CPUreset():
         None
     """
 
-    global memory, register, addI, PC, screen, st, FONT_add
+    global memory, register, addI, PC, screen, st
     memory = np.zeros(0xFFF, dtype=np.uint8)                                                    # 0xFFF BYTES IN ARRAY
     register = np.zeros(16, dtype=np.uint8)                                                     # 16 REGISTERS IN CHIP 8
     addI = np.uint16(0)                                                                         # REGISTER I
@@ -23,20 +30,20 @@ def CPUreset():
                                                   
 
     # --------------- Begin File Loading ----------------------------------------------------------------------------------------------
-    #file = np.fromfile("Chip-8 Games/Space Invaders [David Winter].ch8", dtype=np.uint8)
-    #file = np.fromfile("Chip-8 Games/Pong (alt).ch8", dtype=np.uint8)
-    #file = np.fromfile("Chip-8 Programs/chip8-test-rom.ch8", dtype=np.uint8)
-    #file = np.fromfile("Chip-8 Programs/test_opcode.ch8", dtype=np.uint8)
-    #file = np.fromfile("Chip-8 Programs/BC_test.ch8", dtype=np.uint8)
+    #file = np.fromfile("games/Space Invaders [David Winter] (alt).ch8", dtype=np.uint8)        # TEST GAME 1 ->> NOT PASSED   
+    file = np.fromfile("games/Pong (alt).ch8", dtype=np.uint8)                                  # TEST GAME 2 ->> PASS
+    #file = np.fromfile("programs/chip8-test-rom.ch8", dtype=np.uint8)                          # TEST ROM    ->> PASS
+    #file = np.fromfile("programs/test_opcode.ch8", dtype=np.uint8)                             # TEST ROM    ->> PASS
+    #file = np.fromfile("programs/BC_test.ch8", dtype=np.uint8)                                 # TEST ROM    ->> PASS
+
     for values in range(len(file)):
-        memory[values + 0x200] = file[values]
+        memory[values + 0x200] = file[values]                                                   # LOAD FILE INTO MEMORY
     # --------------- Load Font -------------------------------------------------------------------------------------------------------
-    counter = 0x50
+    counter = 0x0                                                                               # LOAD FONT INTO MEMORY 
     for letter in FONT:
         for codes in FONT[letter]:
             memory[counter] = codes
             counter += 1
-        FONT_add[letter] = counter
 # -------------------------------------------------------------------------------------------------------------------------------------
 # -------------------- ENCODE DECODE FUNCTION -----------------------------------------------------------------------------------------
 
@@ -59,14 +66,26 @@ def decode(opCode):
         opCode: (16 bit hexadecimal number)
     """
     NewOpCode = opCode & 0xF000
-    if NewOpCode == 0x0000: NewOpCode = opCode & 0x00FF
-    if NewOpCode == 0x8000: NewOpCode = opCode & 0xF00F
-    if NewOpCode == 0xE000: NewOpCode = opCode & 0xF0FF
-    if NewOpCode == 0xF000: NewOpCode = opCode & 0xF0FF
+    if NewOpCode == 0x0000: NewOpCode = opCode & 0x00FF                                         # CHECK 0x0 CODES
+    if NewOpCode == 0x8000: NewOpCode = opCode & 0xF00F                                         # CHECK 0x8 CODES
+    if NewOpCode == 0xE000: NewOpCode = opCode & 0xF0FF                                         # CHECK 0xE CODES
+    if NewOpCode == 0xF000: NewOpCode = opCode & 0xF0FF                                         # CHECK 0xF CODES
     return NewOpCode
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 # ------------------ OPCODE FUNCTION --------------------------------------------------------------------------------------------------
+
+def displayClear(opCode):
+    """
+    Clears the current screen by resetting the array to 0
+    OPCODE: 00E0
+    Parameters:
+        opCode: (16 bit hexadecimal number)
+    """
+    global screen
+    screen = np.zeros((64,32) ,dtype=np.uint8)                                                 
+
+# -------------------------------------------------------------------------------------------------------------------------------------
 
 def returnNNN(opCode):
     """
@@ -81,18 +100,6 @@ def returnNNN(opCode):
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
-def displayClear(opCode):
-    """
-    Clears the current screen by resetting the array to 0
-    OPCODE: 00E0
-    Parameters:
-        opCode: (16 bit hexadecimal number)
-    """
-    global screen
-    screen = np.zeros((64,32) ,dtype=np.uint8)                                                  # RESET SCREEN
-    display.fill(BLACK)
-# -------------------------------------------------------------------------------------------------------------------------------------
-
 def jumpNNN(opCode):
     """
     Jumps to NNN of opCode
@@ -101,7 +108,7 @@ def jumpNNN(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global PC
-    PC = opCode & 0x0FFF                                                                        # JUMP TO NNN
+    PC = opCode & 0x0FFF                                                                         # JUMP TO NNN
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -113,8 +120,8 @@ def callNNN(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global PC
-    st.push(PC)                                                                                 # ADD TO STACK
-    PC = opCode & 0x0FFF                                                                        # CALL NNN
+    st.push(PC)                                                                                  # ADD TO STACK
+    PC = opCode & 0x0FFF                                                                         # CALL NNN
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 def skipVxEqNN(opCode):
@@ -125,7 +132,7 @@ def skipVxEqNN(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global PC
-    if register[(opCode & 0x0F00) >> 8] == (opCode & 0x00FF):
+    if register[(opCode & 0x0F00) >> 8] == (opCode & 0x00FF):                                    # CHECK EQUALITY WITH NN
         PC += np.uint16(2)
 # -------------------------------------------------------------------------------------------------------------------------------------
 def skipVxNotNN(opCode):
@@ -136,7 +143,7 @@ def skipVxNotNN(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global PC
-    if register[(opCode & 0x0F00) >> 8] != (opCode & 0x00FF):
+    if register[(opCode & 0x0F00) >> 8] != (opCode & 0x00FF):                                    # CHECK INEQUALITY WITH NN
         PC += np.uint16(2)
 # -------------------------------------------------------------------------------------------------------------------------------------
 def VxEqVy(opCode):
@@ -147,7 +154,7 @@ def VxEqVy(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global PC
-    if register[(opCode & 0x0F00) >> 8] == register[(opCode & 0x00F0) >> 4]:
+    if register[(opCode & 0x0F00) >> 8] == register[(opCode & 0x00F0) >> 4]:                      # CHECK EQUALITY WITH VY
         PC += np.uint16(2)
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -159,7 +166,7 @@ def setVX(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global register
-    register[(opCode&0x0F00) >> 8] = (opCode & 0x00FF)                                          # SET VX IN REGISTER
+    register[(opCode&0x0F00) >> 8] = (opCode & 0x00FF)                                            # SET VX IN REGISTER
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -171,7 +178,7 @@ def addVX(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global register
-    register[(opCode&0x0F00) >> 8] += (opCode & 0x00FF)                                         # ADD VX IN REGISTER
+    register[(opCode&0x0F00) >> 8] += (opCode & 0x00FF)                                           # ADD VX IN REGISTER
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 def setVxToVy(opCode):
@@ -182,7 +189,7 @@ def setVxToVy(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode&0x0F00) >> 8] = register[(opCode&0x00F0) >> 4]
+    register[(opCode&0x0F00) >> 8] = register[(opCode&0x00F0) >> 4]                                # SET VX TO VY
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -194,7 +201,7 @@ def setVxOrVy(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode&0x0F00) >> 8] |= register[(opCode&0x00F0) >> 4]
+    register[(opCode&0x0F00) >> 8] |= register[(opCode&0x00F0) >> 4]                                # VX = VX OR VY 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -206,7 +213,7 @@ def setVxAndVy(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode&0x0F00) >> 8] &= register[(opCode&0x00F0) >> 4]
+    register[(opCode&0x0F00) >> 8] &= register[(opCode&0x00F0) >> 4]                                # VX = VX AND VY
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -218,7 +225,7 @@ def setVxXORVy(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode&0x0F00) >> 8] ^= register[(opCode&0x00F0) >> 4]
+    register[(opCode&0x0F00) >> 8] ^= register[(opCode&0x00F0) >> 4]                                 # VX = VX XOR VY
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -230,10 +237,9 @@ def VxPlusVy(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    if register[(opCode&0x0F00) >> 8] >= 0xFF: register[0xF] = 1
+    if register[(opCode&0x0F00) >> 8] >= 0xFF: register[0xF] = 1                                     # CHECK FOR CARRY
     else: register[0xF] = 0
-    register[(opCode&0x0F00) >> 8] += register[(opCode&0x00F0) >> 4]
-
+    register[(opCode&0x0F00) >> 8] += register[(opCode&0x00F0) >> 4]                                 # ADD VX VY 
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -247,8 +253,8 @@ def VxSubVy(opCode):
     """ 
     global register
     register[0xF] = 1
-    if  register[(opCode&0x0F00) >> 8] < register[(opCode&0x00F0) >> 4]: register[0xF] = 0
-    try: register[(opCode&0x0F00) >> 8] -= register[(opCode&0x00F0) >> 4]
+    if  register[(opCode&0x0F00) >> 8] < register[(opCode&0x00F0) >> 4]: register[0xF] = 0            # CHECK FOR BORROW
+    try: register[(opCode&0x0F00) >> 8] -= register[(opCode&0x00F0) >> 4]                             # IGNORE UNDERFLOW
     except RuntimeWarning: pass
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -262,11 +268,10 @@ def VxShift1R(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode & 0x0F00) >> 8] = register[(opCode & 0x00F0) >> 4]
-    if register[(opCode & 0x0F00) >> 8] & 0x0F:
-        register[0xF] = 1
-    else: register[0xF] = 0
-    register[(opCode & 0x0F00) >> 8] >>= 1
+    register[0xF] = register[(opCode & 0x0F00) >> 8] & 0x1                                             # VF = LSB
+    register[(opCode & 0x0F00) >> 8] >>= 1                                                             # SHIFT VX RIGHT
+    register[(opCode & 0x0F00) >> 8] &= 1                                                              # FIX SIGNED SHIFT
+
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -280,7 +285,7 @@ def VySubVx(opCode):
     """ 
     global register
     register[0xF] = 1
-    if  register[(opCode&0x0F00) >> 8] > register[(opCode&0x00F0) >> 4]: register[0xF] = 0
+    if  register[(opCode&0x0F00) >> 8] > register[(opCode&0x00F0) >> 4]: register[0xF] = 0             # CHECK FOR BORROW
     try: register[(opCode&0x0F00) >> 8] = register[(opCode&0x00F0) >> 4] - register[(opCode&0x0F00) >> 8]
     except RuntimeWarning: pass
 
@@ -295,11 +300,9 @@ def VxShift1L(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode & 0x0F00) >> 8] = register[(opCode & 0x00F0) >> 4]
-    if register[(opCode & 0x0F00) >> 8] & 0xF0:
-        register[0xF] = 1
-    else: register[0xF] = 0
-    register[(opCode & 0x0F00) >> 8] <<= 1
+    register[0xF] = register[(opCode & 0x0F00) >> 8] >> 7                                             # VF = MSB
+    register[(opCode & 0x0F00) >> 8] <<= 1                                                            # SHIFT LEFT 1
+    register[(opCode & 0x0F00) >> 8] &= 1                                                             # FIX SIGNED SHIFT
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -312,7 +315,7 @@ def skipVxEqVy(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global PC
-    if register[(opCode & 0x0F00) >> 8] != register[(opCode & 0x00F0) >> 4]:
+    if register[(opCode & 0x0F00) >> 8] != register[(opCode & 0x00F0) >> 4]:                          # CHECK INEQUALITY VX VY
         PC += np.uint16(2)
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -325,7 +328,7 @@ def setI(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global addI
-    addI = opCode & 0x0FFF                                                                      # SET REGISTER I
+    addI = opCode & 0x0FFF                                                                            # SET REGISTER I
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -338,7 +341,7 @@ def jumpNNNV0(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global PC
-    PC = (opCode & 0x0FFF) + register[0]
+    PC = (opCode & 0x0FFF) + register[0]                                                              # JUMP NNN + V0
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -351,7 +354,7 @@ def randNumVx(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode & 0x0F00) >> 8] = random.randint(0,255) & (opCode & 0x00FF)
+    register[(opCode & 0x0F00) >> 8] = random.randint(0,255) & (opCode & 0x00FF)                      # RANDOM NUM & NN 
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -364,21 +367,19 @@ def drawScreen(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global register, screen
-    x = (opCode & 0x0F00) >> 8                                                                  # GET X FROM DXYN
-    y = (opCode & 0x00F0) >> 4                                                                  # GET Y FROM DXYN
-    OriginalX,OriginalY = register[x], register[y]                                              # GET X,Y FROM REGISTER
-    register[0xF] = 0                                                                           # SET VF TO 0
+    x = (opCode & 0x0F00) >> 8                                                                        # GET X FROM DXYN
+    y = (opCode & 0x00F0) >> 4                                                                        # GET Y FROM DXYN
+    OriginalX,OriginalY = register[x], register[y]                                                    # GET X,Y FROM REGISTER
+    register[0xF] = 0                                                                                 # SET VF TO 0
 
-    for height in range(opCode & 0x000F):                                                       # LOOP 0 -> N
-        spriteData = memory[addI + height]                                                      # GET SPRITE FROM MEMORY[ADDRESS I + OFFSET]
-        y = (OriginalY + height) % 32                                                           # INCREMENT Y
-        for spriteBit in range(8):                                                              # LOOP EACH BIT IN BYTE
-            if spriteData & (0x80 >> spriteBit):                                                # GRAB MSB
-                x = (OriginalX + spriteBit) % 64                                                # INCREMENT X
-                if screen[x][y]: register[0xF] |= 1                                             # CHECK IF SPRITE COLLIDE
-                screen[x][y] ^= 1                                                               # FLIP SPRITE
-                if screen[x][y]:                                                                # CHECK IF SPRITE IS ON
-                    pygame.draw.rect(display, WHITE, pygame.Rect((x*10,y*10), (10,10)))         # DRAW PIXEL
+    for height in range(opCode & 0x000F):                                                             # LOOP 0 -> N
+        spriteData = memory[addI + height]                                                            # GET SPRITE FROM MEMORY[ADDRESS I + OFFSET]
+        y = (OriginalY + height) % 32                                                                 # INCREMENT Y
+        for spriteBit in range(8):                                                                    # LOOP EACH BIT IN BYTE
+            if spriteData & (0x80 >> spriteBit):                                                      # GRAB MSB
+                x = (OriginalX + spriteBit) % 64                                                      # INCREMENT X
+                if screen[x][y]: register[0xF] |= 1                                                   # CHECK IF SPRITE COLLIDE
+                screen[x][y] ^= 1                                                                     # FLIP SPRITE
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -391,13 +392,11 @@ def VXpressed(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global PC
-    x = (opCode & 0x0F00) >> 8
-    for keys in KEYBOARD:
-        print(register[x])
-        raise SystemExit
-        if keys == register[x]:
+    x = (opCode & 0x0F00) >> 8                                                                        # GET X
+    for keys in KEYBOARD:                                                                          
+        if keys == register[x]:                                                                       # IF MATCHING KEY
             if current_key[KEYBOARD[keys]]: 
-                PC += np.uint16(2)
+                PC += np.uint16(2)                                                                    # SKIP
                 break
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -411,13 +410,12 @@ def VXnotPressed(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global PC
-    x = (opCode & 0x0F00) >> 8
+    x = (opCode & 0x0F00) >> 8                                                                        # GET X
     for keys in KEYBOARD:
-        if keys == register[x]:
-            if current_key[KEYBOARD[keys]] == 0: 
-                PC += np.uint16(2)
+        if keys == register[x]:                                                                       # IF MATCHING KEY
+            if current_key[KEYBOARD[keys]] == 0:                                                      # CHECK NOT PRESSED
+                PC += np.uint16(2)                                                                    # SKIP
                 break
-
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -429,7 +427,7 @@ def VxtoTimer(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global register
-    register[(opCode & 0x0F00) >> 8] = delay_timer
+    register[(opCode & 0x0F00) >> 8] = delay_timer                                                    # VX TO DELAY TIMER
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -442,12 +440,12 @@ def getKeyWait(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global PC, register
-    press = False
+    press = False                                                                                     # STATE OF KEYSTROKE
     for keys in KEYBOARD:
-        if current_key[KEYBOARD[keys]]:
+        if current_key[KEYBOARD[keys]]:                                                               # CHECK IF ON
             press = True
-            register[(opCode & 0x0F00) >> 8] = keys
-    if not press: PC -= 2
+            register[(opCode & 0x0F00) >> 8] = keys                                                   # VX TO KEYSTROKE
+    if not press: PC -= 4                                                                             # ELSE SKIP
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -460,7 +458,7 @@ def timerToVx(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global delay_timer
-    delay_timer = register[(opCode & 0x0F00) >> 8]
+    delay_timer = register[(opCode & 0x0F00) >> 8]                                                    # DELAY TIMER TO VX
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -473,7 +471,7 @@ def soundToVx(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global sound_timer
-    sound_timer = register[(opCode & 0x0F00) >> 8]
+    sound_timer = register[(opCode & 0x0F00) >> 8]                                                    # SOUND TIMER TO VX
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -486,7 +484,7 @@ def VxPlusI(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global addI
-    addI = addI + register[(opCode & 0x0F00) >> 8]
+    addI = addI + register[(opCode & 0x0F00) >> 8]                                                    # ADD I + VX
     addI = np.uint16(addI)
 
 # -------------------------------------------------------------------------------------------------------------------------------------
@@ -500,7 +498,7 @@ def ItoFont(opCode):
         opCode: (16 bit hexadecimal number)
     """
     global addI
-    addI = FONT_add[(opCode & 0x0F00) >> 8]
+    addI = register[(opCode & 0x0F00) >> 8] * 5                                                       # ADD I TO VX * 5 (5 DATA IN FONT)
     
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -515,10 +513,10 @@ def setBCD(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global memory
-    x = register[(opCode & 0x0F00) >> 8]
-    memory[addI] = (x//100)
-    memory[addI+1] = (x%100) // 10
-    memory[addI+2] = x % 10
+    x = register[(opCode & 0x0F00) >> 8]                                                              # GET X
+    memory[addI] =(x%1000) /100                                                                       # GET 100s PLACE VALUE
+    memory[addI+1] = (x%100) / 10                                                                     # GET 10s PLACE VALUE
+    memory[addI+2] = x % 10                                                                           # GET 1s PLACE VALUE
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -532,8 +530,8 @@ def regDump(opCode):
         opCode: (16 bit hexadecimal number)
     """ 
     global memory
-    for values in range(((opCode & 0x0F00) >> 8) + 1):
-        memory[addI + values] = register[values]
+    for values in range(((opCode & 0x0F00) >> 8) + 1):                                                
+        memory[addI + values] = register[values]                                                      # SET MEMORY AT I TO V0-VX
 
 # -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -548,10 +546,41 @@ def regLoad(opCode):
     """ 
     global register
     for values in range(((opCode & 0x0F00) >> 8) + 1):
-        register[values] = memory[addI + values]
+        register[values] = memory[addI + values]                                                     # SET V0-VX TO MEMORY AT I
 
 # -------------------------------------------------------------------------------------------------------------------------------------
-# ---------------VARIABLE DECLARATION--------------------------------------------------------------------------------------------------
+# -------------DEBUG FUNCTIONS---------------------------------------------------------------------------------------------------------
+
+def print_debug():
+    """
+    Debug function that prints all important information for the emulation. Function will only run if debug = True.
+    Uncomment certain values as needed.
+    Parameters:
+        None
+    """
+    if currentCode != 0: print("C------>" + hex(currentCode))
+    if decoded != 0: print("D------>" + hex(decoded))
+    print(f"PC: {PC}")
+    #if decoded not in OPCODES: raise SystemExit
+    #print(f"REGISTER: {register}")
+    #print(f"DELAY TIMER: {delay_timer}")
+
+# -------------DRAW FUNCTIONS----------------------------------------------------------------------------------------------------------
+
+def render():
+    """
+    Renders all values of screen to display. 
+    Parameters:
+        None
+    """
+    colour = BLACK
+    for x in range(len(screen)):
+        for y in range(len(screen[0])):
+            if screen[x][y]: colour = WHITE
+            else: colour = BLACK
+            pygame.draw.rect(display, colour,pygame.Rect((x*10, y*10), (10,10)))
+
+# -------------VARIABLE DECLARATION----------------------------------------------------------------------------------------------------
 
 memory, register, addI, PC, screen = (0,0,0,0,0)
 st = Stack()
@@ -565,10 +594,11 @@ OPCODES =           {0x00E0: displayClear, 0x00EE: returnNNN,  0x1000: jumpNNN, 
                      0x7000: addVX,        0x8000: setVxToVy  ,0x8001: setVxOrVy,  0x8002: setVxAndVy,
                      0x8003: setVxXORVy,   0x8004: VxPlusVy,   0x8005: VxSubVy,    0x8006: VxShift1R,
                      0x8007: VySubVx,      0x800E: VxShift1L,  0x9000: skipVxEqVy, 0xA000: setI,    
-                     0xB000: jumpNNNV0,    0xC000: randNumVx,  0xD000: drawScreen, 0xE00E: VXpressed,
-                     0xE001: VXnotPressed, 0xF007: VxtoTimer,  0xF00A: getKeyWait, 0xF015: timerToVx,
+                     0xB000: jumpNNNV0,    0xC000: randNumVx,  0xD000: drawScreen, 0xE09E: VXpressed,
+                     0xE0A1: VXnotPressed, 0xF007: VxtoTimer,  0xF00A: getKeyWait, 0xF015: timerToVx,
                      0xF018: soundToVx,    0xF01E: VxPlusI,    0xF029: ItoFont,    0xF033: setBCD,   
                      0xF055: regDump,      0xF065: regLoad                                            }
+
 
 FONT = {
                      0x0: (0xF0, 0x90, 0x90, 0x90, 0xF0),
@@ -594,32 +624,41 @@ KEYBOARD = {
                      0x7: pygame.K_a, 0x8: pygame.K_s, 0x9: pygame.K_d, 0xE: pygame.K_f,
                      0xA: pygame.K_z, 0x0: pygame.K_x, 0xB: pygame.K_c, 0xF: pygame.K_v,
 }
-FONT_add = {}
 # -------------------------------------------------------------------------------------------------------------------------------------
 # -----------------MAIN LOOP-----------------------------------------------------------------------------------------------------------
 
-CPUreset()
+CPUreset()                                                                                       # INITIALIZE CPU
+pygame.init()                                                                                    # INITALIZE PYGAME
+pygame.midi.init()                                                                               # INITALIZE SOUNDS
+
 playing = True
-pygame.init()
-display = pygame.display.set_mode((640,320))
-clock = pygame.time.Clock()
+debug = False
+
+display = pygame.display.set_mode((640,320))                                                     # 640x320 DISPLAY
+clock = pygame.time.Clock()                                                                      # PYGAME CLOCK
+fx = pygame.midi.Output(0)
+fx.set_instrument(113)
+
+pygame.display.set_caption("CHIP-8 EMULATOR")
 
 while (playing):
-    current_key = pygame.key.get_pressed()
+    current_key = pygame.key.get_pressed()                                                       # GRAB CURRENT KEYSTROKE
     for event in pygame.event.get():
-        if event.type == pygame.QUIT: running = False
-    currentCode = nextCode()
-    decoded = decode(currentCode)
-    if currentCode != 0: print("C------>" + hex(currentCode))
-    if decoded != 0: print("D------>" + hex(decoded))
-    print(f"PC: {PC}")
-   # if decoded not in OPCODES: raise SystemExit
-    OPCODES.get(decoded, lambda x: None )(currentCode)
-    if not (pygame.time.get_ticks() % 1000):
-        if delay_timer > 0: delay_timer -= 60
-        if sound_timer > 0: sound_timer -= 60
-    #print(f"REGISTER: {register}")
-    pygame.display.flip()
-    clock.tick(40)
+        if event.type == pygame.QUIT: running = False                                            # CHECK FOR QUITTING
 
+    currentCode = nextCode()                                                                     # GRAB NEXT INSTRUCTION
+    decoded = decode(currentCode)                                                                # DECODE NEXT INSTRUCTION
+
+    if debug: print_debug()
+
+    OPCODES.get(decoded, lambda x: None )(currentCode)                                           # LINK INSTRUCTION TO FUNCTION
+    render()                                                                                     # RENDER SCREEN
+
+    if delay_timer > 0: delay_timer -= 1                                                         # DECREMENT DELAY TIMER
+    if sound_timer > 0:                                                                          # DECREMENT SOUND TIMER
+        sound_timer -= 1
+        fx.note_on(64,127)                                                                       # PLAY SOUND FX
+
+    pygame.display.flip()                                                                        # UPDATE DISPLAY
+    clock.tick(1000)                                                                             # TICK GAME CLOCK
 # -------------------------------------------------------------------------------------------------------------------------------------
